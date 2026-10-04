@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>API Escuela Primaria - Documentación</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.5; color: #222; }
+        h1 { border-bottom: 3px solid #2b6cb0; padding-bottom: 8px; }
+        h2 { margin-top: 35px; color: #2b6cb0; }
+        h3 { margin-bottom: 5px; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+        th { background: #f0f4f8; }
+        code { background: #f4f4f4; padding: 2px 5px; border-radius: 3px; }
+        pre { background: #f4f4f4; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .get { color: #1a7f37; font-weight: bold; }
+        .post { color: #b7791f; font-weight: bold; }
+        .delete { color: #c53030; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<h1>API Escuela Primaria - Matrículas</h1>
+
+<p>API REST construida con ASP.NET Core (C#). Gestiona los estudiantes de una escuela primaria,
+el personal docente y las matrículas por grado. Los datos se guardan en memoria: al reiniciar
+la API se pierden.</p>
+
+<p><strong>Formato de las respuestas:</strong> JSON. Los errores usan siempre este cuerpo:</p>
+<pre>{
+  "estado": 400,
+  "mensaje": "El campo 'nombre' es obligatorio y no puede estar vacío.",
+  "fecha": "2026-01-15T10:30:00"
+}</pre>
+
+<h2>Resumen de códigos de estado</h2>
+<table>
+    <tr><th>Código</th><th>Endpoint</th><th>Cuándo ocurre</th></tr>
+    <tr><td>200 OK</td><td>GET /api/estudiantes</td><td>Se listan los estudiantes correctamente</td></tr>
+    <tr><td>201 Created</td><td>POST /api/matriculas</td><td>Se creó una matrícula (devuelve id y ruta)</td></tr>
+    <tr><td>204 No Content</td><td>DELETE /api/matriculas/{id}</td><td>Matrícula anulada, respuesta sin cuerpo</td></tr>
+    <tr><td>400 Bad Request</td><td>POST /api/estudiantes</td><td>Falta un campo obligatorio o viene vacío</td></tr>
+    <tr><td>401 Unauthorized</td><td>GET /api/estudiantes/{id}/expediente</td><td>No se envió el encabezado Authorization</td></tr>
+    <tr><td>403 Forbidden</td><td>DELETE /api/estudiantes/{id}</td><td>El rol no tiene permiso (se requiere Docente, Director o Admin)</td></tr>
+    <tr><td>404 Not Found</td><td>GET /api/estudiantes/{id}</td><td>El id buscado no existe</td></tr>
+    <tr><td>409 Conflict</td><td>POST /api/docentes</td><td>El código del docente ya existe</td></tr>
+    <tr><td>422 Unprocessable Entity</td><td>POST /api/estudiantes</td><td>El JSON es válido pero viola una regla de negocio</td></tr>
+    <tr><td>500 Internal Server Error</td><td>GET /api/estudiantes/{id}/promedio</td><td>Fallo no controlado en la lógica interna</td></tr>
+</table>
+
+<h2>Endpoints</h2>
+
+<h3><span class="get">GET</span> /api/estudiantes</h3>
+<p><strong>Recibe:</strong> nada. Opcionalmente los query params <code>?matriculado=true|false</code> y <code>?grado=2do</code>.</p>
+<p><strong>Retorna:</strong> <code>200</code> con el listado de estudiantes.</p>
+<pre>curl "http://localhost:5106/api/estudiantes?matriculado=true&amp;grado=2do"</pre>
+
+<h3><span class="post">POST</span> /api/estudiantes</h3>
+<p><strong>Recibe</strong> (JSON):</p>
+<pre>{
+  "nombre": "Juan Pérez",
+  "edad": 9,
+  "fechaNacimiento": "2017-05-20",
+  "sexo": "M",
+  "alergias": "Ninguna",
+  "promedio": 4.1,
+  "grado": "4to",
+  "seccion": "B"
+}</pre>
+<p><strong>Retorna:</strong></p>
+<ul>
+    <li><code>400</code> si falta <code>nombre</code>, <code>edad</code> o <code>grado</code>.</li>
+    <li><code>422</code> si la edad no está entre 5 y 12, si la fecha de nacimiento es futura,
+        si el promedio no está entre 0.0 y 5.0 o si el sexo no es M, F o X.</li>
+    <li><code>201</code> con el estudiante creado (incluye el id generado y la ruta).</li>
+</ul>
+<pre>curl -X POST http://localhost:5106/api/estudiantes -H "Content-Type: application/json" -d '{"nombre":"Juan Pérez","edad":9,"grado":"4to","promedio":4.1}'</pre>
+
+<h3><span class="get">GET</span> /api/estudiantes/{id}</h3>
+<p><strong>Recibe:</strong> el id en la ruta. <strong>Retorna:</strong> <code>200</code> con el estudiante
+o <code>404</code> si el id no existe.</p>
+<pre>curl http://localhost:5106/api/estudiantes/1
+curl http://localhost:5106/api/estudiantes/99</pre>
+
+<h3><span class="get">GET</span> /api/estudiantes/{id}/expediente</h3>
+<p><strong>Recibe:</strong> encabezado <code>Authorization: Bearer &lt;rol&gt;</code> (obligatorio).</p>
+<p><strong>Retorna:</strong> <code>401</code> si no viene el encabezado, <code>404</code> si el id no existe,
+o <code>200</code> con el expediente académico del estudiante.</p>
+<pre>curl -H "Authorization: Bearer Docente" http://localhost:5106/api/estudiantes/1/expediente</pre>
+
+<h3><span class="delete">DELETE</span> /api/estudiantes/{id}</h3>
+<p><strong>Recibe:</strong> encabezado <code>Authorization: Bearer &lt;rol&gt;</code> (obligatorio).</p>
+<p><strong>Retorna:</strong> <code>401</code> sin encabezado, <code>403</code> si el rol no es
+<code>Docente</code>, <code>Director</code> o <code>Admin</code>, <code>404</code> si el id no existe,
+o <code>204</code> sin cuerpo si se dio de baja al estudiante.</p>
+<pre>curl -X DELETE -H "Authorization: Bearer Docente"   http://localhost:5106/api/estudiantes/4
+curl -X DELETE -H "Authorization: Bearer Estudiante" http://localhost:5106/api/estudiantes/4</pre>
+
+<h3><span class="get">GET</span> /api/estudiantes/{id}/promedio</h3>
+<p><strong>Recibe:</strong> el id en la ruta. <strong>Retorna:</strong> <code>500</code>,
+porque internamente hace una división entre cero (fallo no controlado a propósito).</p>
+<pre>curl http://localhost:5106/api/estudiantes/1/promedio</pre>
+
+<h3><span class="get">GET</span> /api/docentes</h3>
+<p><strong>Recibe:</strong> nada. Opcionalmente el query param <code>?rol=Docente</code>.
+<strong>Retorna:</strong> <code>200</code> con el listado del personal docente.</p>
+<pre>curl http://localhost:5106/api/docentes</pre>
+
+<h3><span class="post">POST</span> /api/docentes</h3>
+<p><strong>Recibe</strong> (JSON):</p>
+<pre>{
+  "codigo": "DOC-003",
+  "nombre": "Laura Gómez",
+  "edad": 34,
+  "email": "laura.gomez@colegio.com",
+  "rol": "Docente"
+}</pre>
+<p><strong>Retorna:</strong></p>
+<ul>
+    <li><code>400</code> si falta <code>codigo</code>, <code>nombre</code> o <code>edad</code>.</li>
+    <li><code>409</code> si el <code>codigo</code> ya existe (es único).</li>
+    <li><code>422</code> si la edad es menor a 21 o el email no tiene formato válido.</li>
+    <li><code>201</code> con el docente creado.</li>
+</ul>
+<pre>curl -X POST http://localhost:5106/api/docentes -H "Content-Type: application/json" -d '{"codigo":"DOC-003","nombre":"Laura Gómez","edad":34,"email":"laura.gomez@colegio.com"}'</pre>
+
+<h3><span class="get">GET</span> /api/matriculas</h3>
+<p><strong>Recibe:</strong> nada. <strong>Retorna:</strong> <code>200</code> con el listado de matrículas.</p>
+<pre>curl http://localhost:5106/api/matriculas</pre>
+
+<h3><span class="post">POST</span> /api/matriculas</h3>
+<p><strong>Recibe</strong> (JSON):</p>
+<pre>{
+  "estudianteId": 3,
+  "codigoDocente": "DOC-001",
+  "grado": "1ro",
+  "seccion": "A",
+  "fecha": "2026-01-20"
+}</pre>
+<p><strong>Retorna:</strong></p>
+<ul>
+    <li><code>400</code> si falta <code>estudianteId</code>, <code>codigoDocente</code> o <code>grado</code>.</li>
+    <li><code>404</code> si el estudiante o el docente no existen.</li>
+    <li><code>409</code> si el estudiante ya está matriculado.</li>
+    <li><code>422</code> si la fecha de matrícula es futura o el docente es menor de 21 años.</li>
+    <li><code>201</code> con la matrícula creada (incluye el id y la ruta del nuevo recurso).</li>
+</ul>
+<pre>curl -X POST http://localhost:5106/api/matriculas -H "Content-Type: application/json" -d '{"estudianteId":3,"codigoDocente":"DOC-001","grado":"1ro","seccion":"A"}'</pre>
+
+<h3><span class="delete">DELETE</span> /api/matriculas/{id}</h3>
+<p><strong>Recibe:</strong> el id de la matrícula. <strong>Retorna:</strong> <code>404</code> si la
+matrícula no existe o <code>204</code> con el cuerpo completamente vacío al anularla.</p>
+<pre>curl -i -X DELETE http://localhost:5106/api/matriculas/1</pre>
+
+</body>
+</html>
